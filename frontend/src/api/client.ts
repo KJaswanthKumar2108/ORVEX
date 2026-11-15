@@ -15,8 +15,12 @@ export class ApiClientError extends Error {
   }
 }
 
+const resolvedEnvUrl =
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
+  (import.meta.env.BACKEND_URL as string | undefined);
+
 export const API_BASE_URL =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, "") ??
+  resolvedEnvUrl?.replace(/\/+$/, "") ??
   (import.meta.env.DEV ? "http://127.0.0.1:8000" : "");
 
 const DEFAULT_TIMEOUT_MS = 10000;

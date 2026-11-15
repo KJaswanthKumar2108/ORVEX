@@ -8,6 +8,7 @@ router = APIRouter()
 
 
 @router.get("/health")
+@router.get("/api/health")
 def health(request: Request, details: bool = Query(default=False)) -> dict[str, Any]:
     if not details:
         return {"status": "ok"}
