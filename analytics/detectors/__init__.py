@@ -1,0 +1,1 @@
+"""Explainable in-memory detection rules and event aggregation."""

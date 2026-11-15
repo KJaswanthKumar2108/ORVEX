@@ -1,0 +1,103 @@
+# ==============================================================================
+# ORVEX Production Docker Compose Deployment
+# Complete containerized stack: TimescaleDB + Mosquitto + FastAPI + Nginx Frontend
+# ==============================================================================
+
+services:
+  database:
+    image: timescale/timescaledb:2.17.2-pg16
+    container_name: orvex-prod-database
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-orvex}
+      POSTGRES_USER: ${POSTGRES_USER:-orvex}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    ports:
+      # Expose only on loopback for administrative backup access
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - timescale_prod_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - orvex-prod-network
+
+  mqtt:
+    image: eclipse-mosquitto:2.0.22
+    container_name: orvex-prod-mqtt
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MQTT_PORT:-1883}:1883"
+    volumes:
+      - ./docker/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_prod_data:/mosquitto/data
+      - mosquitto_prod_log:/mosquitto/log
+    networks:
+      - orvex-prod-network
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: orvex-prod-backend
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+      mqtt:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-orvex}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB:-orvex}
+      MQTT_HOST: mqtt
+      MQTT_PORT: 1883
+      MQTT_ENABLED: ${MQTT_ENABLED:-true}
+      MQTT_TOPIC_PREFIX: ${MQTT_TOPIC_PREFIX:-orvex}
+      ENVIRONMENT: production
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173}
+      RATE_LIMIT_ENABLED: "true"
+      RATE_LIMIT_PER_MINUTE: 120
+      MAX_REQUEST_BODY_BYTES: 2097152
+      WEB_CONCURRENCY: 2
+    expose:
+      - "8000"
+    ports:
+      # Optional direct API access bound to localhost for debugging/tests
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - orvex-prod-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ""
+    container_name: orvex-prod-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-8080}:8080"
+    networks:
+      - orvex-prod-network
+
+volumes:
+  timescale_prod_data:
+  mosquitto_prod_data:
+  mosquitto_prod_log:
+
+networks:
+  orvex-prod-network:
+    driver: bridge
+

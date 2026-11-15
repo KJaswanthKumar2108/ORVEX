@@ -1,0 +1,16 @@
+# ORVEX MQTT Access Control List (ACL) Template
+# ------------------------------------------------------------------------------
+
+# 1. Backend Gateway Account: Full read/write access to all ORVEX topics
+user orvex_gateway
+topic readwrite orvex/#
+
+# 2. Plant Edge Ingestion Account: Can publish telemetry and heartbeat
+user orvex_edge_node
+topic write orvex/v1/machines/+/telemetry
+topic write orvex/v1/machines/+/heartbeat
+
+# 3. Read-Only Auditor / Plant Monitor Account
+user orvex_auditor
+topic read orvex/#
+
