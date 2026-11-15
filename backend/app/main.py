@@ -43,9 +43,12 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     application.state.mqtt_gateway = None
 
     if settings.database_url:
-        engine = create_database_engine(settings.database_url)
-        Base.metadata.create_all(bind=engine, checkfirst=True)
-        application.state.session_factory = create_session_factory(engine)
+        try:
+            engine = create_database_engine(settings.database_url)
+            Base.metadata.create_all(bind=engine, checkfirst=True)
+            application.state.session_factory = create_session_factory(engine)
+        except Exception as err:
+            logger.warning("Database connection failed or deferred at startup: %s", err)
 
     # Initialize and start the MQTT hardware gateway if enabled and database is available
     if settings.mqtt_enabled and application.state.session_factory is not None:
