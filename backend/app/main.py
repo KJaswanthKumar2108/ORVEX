@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.routes import (
@@ -137,6 +139,38 @@ def create_app() -> FastAPI:
         logger.error("Unhandled application exception: %s", exception, exc_info=True)
         detail_msg = str(exception) if settings.environment != "production" else "Internal server error."
         return JSONResponse(status_code=500, content={"detail": detail_msg})
+
+    # Frontend SPA Integration (serves frontend/dist when available for single-service deployment)
+    frontend_dist = os.environ.get(
+        "FRONTEND_DIST_DIR",
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")),
+    )
+    if os.path.exists(frontend_dist):
+        assets_dir = os.path.join(frontend_dist, "assets")
+        if os.path.exists(assets_dir):
+            application.mount("/assets", StaticFiles(directory=assets_dir), name="static_assets")
+
+        index_file = os.path.join(frontend_dist, "index.html")
+
+        @application.get("/", include_in_schema=False)
+        async def serve_root() -> FileResponse:
+            if os.path.isfile(index_file):
+                return FileResponse(index_file)
+            raise HTTPException(status_code=404, detail="Frontend index.html not found.")
+
+        @application.get("/{full_path:path}", include_in_schema=False)
+        async def serve_spa_frontend(full_path: str) -> FileResponse:
+            if (
+                full_path.startswith("api/")
+                or full_path in ("health", "docs", "redoc", "openapi.json")
+            ):
+                raise HTTPException(status_code=404, detail="Not Found")
+            file_path = os.path.join(frontend_dist, full_path)
+            if os.path.isfile(file_path):
+                return FileResponse(file_path)
+            if os.path.isfile(index_file):
+                return FileResponse(index_file)
+            raise HTTPException(status_code=404, detail="Frontend index.html not found.")
 
     return application
 

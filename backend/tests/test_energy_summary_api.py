@@ -67,10 +67,8 @@ class EnergySummaryApiTests(unittest.TestCase):
         )
         self.app.dependency_overrides[get_energy_analytics_service] = lambda: self.service
         self.client = TestClient(self.app)
-        self.client.__enter__()
 
     def tearDown(self) -> None:
-        self.client.__exit__(None, None, None)
         self.app.dependency_overrides.clear()
 
     def test_energy_summary_trapezoidal_integration(self) -> None:
